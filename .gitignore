@@ -1,0 +1,18 @@
+# Dataset – too large for git (200 MB uncompressed)
+BU4DFE_BND_V1.1/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Claude Code local settings
+.claude/
+
+# IDE / OS
+.vscode/
+.idea/
+*.DS_Store
+Thumbs.db
