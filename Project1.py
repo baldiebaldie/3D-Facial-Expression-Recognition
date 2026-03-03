@@ -13,17 +13,15 @@ Usage:
 Modes (feature representations):
     o  - original    : raw x, y, z coordinates (no transformation)
     t  - translated  : face centered at the origin (subtract centroid)
-    x  - rotate x    : (coming soon)
-    y  - rotate y    : (coming soon)
-    z  - rotate z    : (coming soon)
+    x  - rotate x    : 180-degree rotation around the x-axis
+    y  - rotate y    : 180-degree rotation around the y-axis
+    z  - rotate z    : 180-degree rotation around the z-axis
 
 Example:
     python Project1.py t ./BU4DFE_BND_V1.1
 
-Classifiers:
-    1. Support Vector Machine (linear SVM via LinearSVC)
-    2. k-Nearest Neighbours (k=5)
-    3. Random Forest (100 trees)
+Classifier:
+    Random Forest (100 trees)
 
 Each .bnd file: 83 rows of  <index>  <x>  <y>  <z>
                 (optional empty 84th row is ignored)
@@ -34,18 +32,14 @@ import sys
 import glob
 import time
 import warnings
+from math import acos, cos, sin
 
 # Force UTF-8 output so Unicode box-drawing characters print on Windows
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
 import numpy as np
-import matplotlib
-matplotlib.use("Agg")           # non-interactive backend, safe on all platforms
-import matplotlib.pyplot as plt
 
-from sklearn.svm import LinearSVC
-from sklearn.neighbors import KNeighborsClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import (accuracy_score, classification_report,
@@ -109,10 +103,18 @@ def transform_landmarks(landmarks, mode):
     'o'  original   – raw x, y, z  (no change)
     't'  translated – subtract the centroid so the face is centred at (0,0,0)
                       centroid = mean of all 83 landmark positions
-    'x'  rotate-x   – (not yet implemented)
-    'y'  rotate-y   – (not yet implemented)
-    'z'  rotate-z   – (not yet implemented)
+    'x'  rotate-x   – 180-degree rotation around the x-axis using the
+                      rotation matrix specified in the project spec
+    'y'  rotate-y   – 180-degree rotation around the y-axis
+    'z'  rotate-z   – 180-degree rotation around the z-axis
+
+    PI is approximated per the project spec: round(2 * acos(0.0), 3)
+    Each landmark [x, y, z] is treated as a column vector and multiplied
+    by the appropriate 3x3 rotation matrix (R @ point).
     """
+    # PI approximation as required by the project specification
+    PI = round(2 * acos(0.0), 3)
+
     if mode == "o":
         # Return raw coordinates unchanged
         return landmarks.copy()
@@ -127,13 +129,38 @@ def transform_landmarks(landmarks, mode):
         return landmarks - centroid
 
     elif mode == "x":
-        raise NotImplementedError("Rotation around x-axis not yet implemented.")
+        # --- 180-degree rotation around the x-axis ---
+        # R_x = [[1,      0,       0    ],
+        #         [0,  cos(π),  sin(π)  ],
+        #         [0, -sin(π),  cos(π)  ]]
+        c, s = cos(PI), sin(PI)
+        R_x = np.array([[1,  0,  0],
+                         [0,  c,  s],
+                         [0, -s,  c]], dtype=np.float32)
+        # Apply rotation: each landmark is a row vector; transpose, multiply, transpose back
+        return (R_x @ landmarks.T).T
 
     elif mode == "y":
-        raise NotImplementedError("Rotation around y-axis not yet implemented.")
+        # --- 180-degree rotation around the y-axis ---
+        # R_y = [[ cos(π),  0, -sin(π)],
+        #         [   0,     1,    0   ],
+        #         [ sin(π),  0,  cos(π)]]
+        c, s = cos(PI), sin(PI)
+        R_y = np.array([[ c,  0, -s],
+                         [ 0,  1,  0],
+                         [ s,  0,  c]], dtype=np.float32)
+        return (R_y @ landmarks.T).T
 
     elif mode == "z":
-        raise NotImplementedError("Rotation around z-axis not yet implemented.")
+        # --- 180-degree rotation around the z-axis ---
+        # R_z = [[ cos(π),  sin(π),  0],
+        #         [-sin(π),  cos(π),  0],
+        #         [   0,       0,     1]]
+        c, s = cos(PI), sin(PI)
+        R_z = np.array([[ c,  s,  0],
+                         [-s,  c,  0],
+                         [ 0,  0,  1]], dtype=np.float32)
+        return (R_z @ landmarks.T).T
 
     else:
         raise ValueError(f"Unknown mode '{mode}'. Valid modes: {sorted(VALID_MODES)}")
@@ -154,11 +181,12 @@ def load_dataset(data_dir, mode, peak_only=False):
     """
     X_list, y_list, subj_list = [], [], []
 
-    subject_dirs = sorted(glob.glob(os.path.join(data_dir, "F*")))
+    subject_dirs = sorted(glob.glob(os.path.join(data_dir, "F*")) +
+                          glob.glob(os.path.join(data_dir, "M*")))
     if not subject_dirs:
         raise FileNotFoundError(
             f"No subject directories found under: {data_dir}\n"
-            "Expected structure:  <data_dir>/F001/Angry/*.bnd  etc."
+            "Expected structure:  <data_dir>/F001/Angry/*.bnd  or  M001/Angry/*.bnd  etc."
         )
 
     for subj_dir in subject_dirs:
@@ -204,10 +232,12 @@ def loso_eval(X, y, subjects, clf_name, clf):
       - StandardScaler is fit on train split only (prevents data leakage).
       - Test on the held-out subject's samples.
 
-    Returns (overall_accuracy, all_true_labels, all_predicted_labels).
+    Returns (overall_accuracy, all_true_labels, all_predicted_labels,
+             fold_rows, elapsed_seconds).
+    fold_rows is a list of (subject, n_test_samples, fold_accuracy) tuples.
     """
     unique_subjects = np.unique(subjects)
-    all_true, all_preds = [], []
+    all_true, all_preds, fold_rows = [], [], []
 
     bar = "=" * 64
     print(f"\n{bar}")
@@ -233,6 +263,7 @@ def loso_eval(X, y, subjects, clf_name, clf):
         fold_acc = accuracy_score(y_test, preds)
         all_true.extend(y_test)
         all_preds.extend(preds)
+        fold_rows.append((test_subj, len(y_test), fold_acc))
 
         print(f"  {test_subj}  |  test samples: {len(y_test):4d}  |  "
               f"acc = {fold_acc:.4f}")
@@ -242,50 +273,57 @@ def loso_eval(X, y, subjects, clf_name, clf):
 
     print(f"\n  Elapsed : {elapsed:.1f}s")
     print(f"  Overall LOSO Accuracy : {overall:.4f}")
-    print(f"\n  Classification Report :")
-    print(classification_report(all_true, all_preds,
-                                target_names=EXPRESSIONS, digits=4))
-    print("  Confusion Matrix (rows = true, cols = predicted) :")
-    print(confusion_matrix(all_true, all_preds))
 
-    return overall, all_true, all_preds
+    return overall, all_true, all_preds, fold_rows, elapsed
 
 
-# ── Confusion-matrix plot ─────────────────────────────────────────────────────
+# ── Text results writer ───────────────────────────────────────────────────────
 
-def plot_confusion_matrix(true, preds, clf_name, mode, save_dir):
-    """Save a colour-coded confusion matrix PNG.  Filename includes the mode."""
-    cm  = confusion_matrix(true, preds)
-    fig, ax = plt.subplots(figsize=(7, 6))
-    im  = ax.imshow(cm, interpolation="nearest", cmap=plt.cm.Blues)
-    plt.colorbar(im, ax=ax)
+def write_results(true, preds, overall_acc, elapsed, mode, mode_label,
+                  fold_rows, save_dir):
+    """Write per-fold accuracy and confusion matrix to a plain-text table file."""
+    cm = confusion_matrix(true, preds)
+    report = classification_report(true, preds,
+                                   target_names=EXPRESSIONS, digits=4)
 
-    ticks = np.arange(len(EXPRESSIONS))
-    ax.set_xticks(ticks)
-    ax.set_yticks(ticks)
-    ax.set_xticklabels(EXPRESSIONS, rotation=45, ha="right")
-    ax.set_yticklabels(EXPRESSIONS)
+    col_w = 10          # width of each expression column in the confusion matrix
+    label_w = 10        # width of the row-label column
 
-    thresh = cm.max() / 2.0
-    for i in range(cm.shape[0]):
-        for j in range(cm.shape[1]):
-            ax.text(j, i, cm[i, j],
-                    ha="center", va="center",
-                    color="white" if cm[i, j] > thresh else "black",
-                    fontsize=9)
+    out_path = os.path.join(save_dir, f"results_{mode}.txt")
+    with open(out_path, "w", encoding="utf-8") as f:
+        bar = "=" * 64
+        f.write(f"{bar}\n")
+        f.write(f"  Random Forest (100 trees)  –  mode={mode}  ({mode_label})\n")
+        f.write(f"{bar}\n\n")
 
-    ax.set_ylabel("True label")
-    ax.set_xlabel("Predicted label")
-    ax.set_title(f"Confusion Matrix [{mode}] – {clf_name}")
-    fig.tight_layout()
+        # Per-fold table
+        f.write(f"  {'Subject':<10}  {'Test Samples':>12}  {'Accuracy':>10}\n")
+        f.write(f"  {'-'*10}  {'-'*12}  {'-'*10}\n")
+        for subj, n_test, acc in fold_rows:
+            f.write(f"  {subj:<10}  {n_test:>12}  {acc:>10.4f}\n")
 
-    safe_clf = (clf_name.replace(" ", "_")
-                        .replace("(", "").replace(")", "")
-                        .replace(",", "").replace("=", ""))
-    out_path = os.path.join(save_dir, f"cm_{mode}_{safe_clf}.png")
-    fig.savefig(out_path, dpi=120)
-    plt.close(fig)
-    print(f"  Confusion matrix saved -> {out_path}")
+        f.write(f"\n  {'Elapsed':<24}: {elapsed:.1f}s\n")
+        f.write(f"  {'Overall LOSO Accuracy':<24}: {overall_acc:.4f}\n\n")
+
+        # Classification report
+        f.write(f"  Classification Report:\n")
+        for line in report.splitlines():
+            f.write(f"  {line}\n")
+
+        # Confusion matrix
+        f.write(f"\n  Confusion Matrix (rows = true, cols = predicted):\n\n")
+        header = f"  {'':{label_w}}" + "".join(
+            f"{e:>{col_w}}" for e in EXPRESSIONS)
+        f.write(header + "\n")
+        f.write(f"  {'-' * (label_w + col_w * len(EXPRESSIONS))}\n")
+        for i, expr in enumerate(EXPRESSIONS):
+            row = f"  {expr:{label_w}}" + "".join(
+                f"{cm[i, j]:>{col_w}}" for j in range(len(EXPRESSIONS)))
+            f.write(row + "\n")
+
+        f.write(f"\n{bar}\n")
+
+    print(f"  Results saved -> {out_path}")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -337,35 +375,14 @@ def main():
     print("  Per-class   : "
           + "  ".join(f"{e}={n}" for e, n in zip(EXPRESSIONS, counts)))
 
-    # ── 3. Classifiers ────────────────────────────────────────────────────────
-    classifiers = {
-        "SVM (linear, C=1)":
-            LinearSVC(C=1, max_iter=5000, random_state=42),
+    # ── 3. LOSO cross-validation (Random Forest) ──────────────────────────────
+    clf = RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=-1)
+    acc, true, preds, fold_rows, elapsed = loso_eval(
+        X, y, subjects, "Random Forest (100 trees)", clf)
 
-        "k-NN (k=5, Euclidean)":
-            KNeighborsClassifier(n_neighbors=5, metric="euclidean", n_jobs=-1),
-
-        "Random Forest (100 trees)":
-            RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=-1),
-    }
-
-    # ── 4. LOSO cross-validation ──────────────────────────────────────────────
-    summary = {}
-    for clf_name, clf in classifiers.items():
-        acc, true, preds = loso_eval(X, y, subjects, clf_name, clf)
-        summary[clf_name] = acc
-        plot_confusion_matrix(true, preds, clf_name, mode, save_dir)
-
-    # ── 5. Summary ────────────────────────────────────────────────────────────
-    bar = "=" * 64
-    print(f"\n{bar}")
-    print(f"  SUMMARY  –  mode={mode}  ({mode_labels[mode]})")
-    print(bar)
-    best = max(summary, key=summary.get)
-    for clf_name, acc in summary.items():
-        tag = "  <- best" if clf_name == best else ""
-        print(f"  {clf_name:<32}  {acc:.4f}{tag}")
-    print(bar)
+    # ── 4. Write results to text file ─────────────────────────────────────────
+    write_results(true, preds, acc, elapsed, mode, mode_labels[mode],
+                  fold_rows, save_dir)
 
 
 if __name__ == "__main__":
