@@ -274,6 +274,22 @@ def loso_eval(X, y, subjects, clf_name, clf):
     print(f"\n  Elapsed : {elapsed:.1f}s")
     print(f"  Overall LOSO Accuracy : {overall:.4f}")
 
+    # Print classification report (precision, recall, F1) and confusion matrix
+    # to screen as required by the project specification
+    print(f"\n  Classification Report:")
+    print(classification_report(all_true, all_preds,
+                                target_names=EXPRESSIONS, digits=4))
+
+    cm = confusion_matrix(all_true, all_preds)
+    col_w, label_w = 10, 10
+    print("  Confusion Matrix (rows = true, cols = predicted):")
+    print("  " + " " * label_w + "".join(f"{e:>{col_w}}" for e in EXPRESSIONS))
+    print("  " + "-" * (label_w + col_w * len(EXPRESSIONS)))
+    for i, expr in enumerate(EXPRESSIONS):
+        print("  " + f"{expr:{label_w}}" +
+              "".join(f"{cm[i, j]:>{col_w}}" for j in range(len(EXPRESSIONS))))
+    print()
+
     return overall, all_true, all_preds, fold_rows, elapsed
 
 
