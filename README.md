@@ -1,7 +1,7 @@
 # 3D Facial Expression Recognition
 
 **Affective Computing – Spring 2026**
-Bryan Baldie (U44374228), Twinkle Markana (55075888)
+Bryan Baldie (U44374228), Twinkle Markana (U55075888)
 
 Classifies 6 facial expressions from 3D landmark data using Leave-One-Subject-Out (LOSO) cross-validation on the BU-4DFE dataset.
 

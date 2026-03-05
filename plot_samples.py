@@ -2,7 +2,7 @@
 plot_samples.py
 Affective Computing - Spring 2026
 Bryan Baldie  U44374228
-Twinkle Markana  U########
+Twinkle Markana  U55075888
 
 Generates 5 3D scatter plots (one per data mode) using a single sample face
 from the BU-4DFE dataset. Required for Report Question 4.
