@@ -1,7 +1,7 @@
 # 3D Facial Expression Recognition
 
 **Affective Computing – Spring 2026**
-Bryan Baldie (U44374228), Twinkle Markana
+Bryan Baldie (U44374228), Twinkle Markana (55075888)
 
 Classifies 6 facial expressions from 3D landmark data using Leave-One-Subject-Out (LOSO) cross-validation on the BU-4DFE dataset.
 
@@ -23,15 +23,16 @@ BU-4DFE (`BU4DFE_BND_V1.1/`) — 101 subjects (58 female F001–F058, 43 male M0
 python Project1.py <mode> <data_dir>
 ```
 
-| Mode | Description |
-|------|-------------|
-| `o`  | Original – raw x, y, z coordinates |
+| Mode | Description                                               |
+| ---- | --------------------------------------------------------- |
+| `o`  | Original – raw x, y, z coordinates                        |
 | `t`  | Translated – centroid subtracted (face centred at origin) |
-| `x`  | Rotated 180° around x-axis |
-| `y`  | Rotated 180° around y-axis |
-| `z`  | Rotated 180° around z-axis |
+| `x`  | Rotated 180° around x-axis                                |
+| `y`  | Rotated 180° around y-axis                                |
+| `z`  | Rotated 180° around z-axis                                |
 
 **Example:**
+
 ```
 python Project1.py t ./BU4DFE_BND_V1.1
 ```
@@ -73,10 +74,10 @@ PEAK_ONLY = False  # True = last frame only (~601 samples, fast)
 
 ## Packages
 
-| Package | Version tested | Purpose |
-|---------|---------------|---------|
-| `numpy` | ≥ 1.24 | Array operations, matrix multiplication |
-| `scikit-learn` | ≥ 1.3 | RandomForestClassifier, StandardScaler, metrics |
-| `matplotlib` | ≥ 3.7 | 3D scatter plots (`plot_samples.py` only) |
+| Package        | Version tested | Purpose                                         |
+| -------------- | -------------- | ----------------------------------------------- |
+| `numpy`        | ≥ 1.24         | Array operations, matrix multiplication         |
+| `scikit-learn` | ≥ 1.3          | RandomForestClassifier, StandardScaler, metrics |
+| `matplotlib`   | ≥ 3.7          | 3D scatter plots (`plot_samples.py` only)       |
 
 Standard library: `os`, `sys`, `glob`, `time`, `warnings`, `math`
